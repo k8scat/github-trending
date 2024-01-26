@@ -2,17 +2,24 @@ use std::{
     convert::TryInto,
     fs::File,
     io::Read,
+    iter::FromIterator,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Ok, Result};
 use atrium_api::{app::bsky, client::AtpServiceClient, com::atproto};
 use bytes::Bytes;
 use log::{error, info};
 use once_cell::sync::Lazy;
 use redis::AsyncCommands;
+use reqwest::{
+    header::{HeaderMap, HeaderName, HeaderValue},
+    Method,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::str::FromStr;
 use time::OffsetDateTime;
 use twitter_v2::{authorization::Oauth1aToken, TwitterApi};
 use unicode_segmentation::UnicodeSegmentation;
@@ -23,6 +30,7 @@ const TOOT_LENGTH: usize = 500;
 const BLUESKY_POST_LENGTH: usize = 300;
 const MASTODON_FIXED_URL_LENGTH: usize = 23;
 const SMALL_COMMERCIAL_AT: &str = "﹫";
+const ZSXQ_LENGTH: usize = 10000;
 
 #[derive(Deserialize)]
 struct IntervalConfig {
@@ -55,6 +63,12 @@ struct BlueskyConfig {
     host: String,
     identifier: String,
     password: String,
+}
+
+#[derive(Deserialize, Clone)]
+struct ZsxqConfig {
+    cookie: String,
+    group_id: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -91,6 +105,7 @@ struct Config {
     #[serde(default)]
     bluesky: Option<BlueskyConfig>,
     denylist: DenylistConfig,
+    zsxq: Option<ZsxqConfig>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -304,6 +319,57 @@ async fn toot(config: &MastodonConfig, content: &str) -> Result<()> {
     Ok(())
 }
 
+async fn post_zsxq(config: &ZsxqConfig, repo: &Repo) -> Result<()> {
+    let prefix = make_post_prefix(repo);
+    let stars = make_post_stars(repo);
+    let url = make_post_url(repo);
+
+    let length_left = ZSXQ_LENGTH - (prefix.len() + stars.len() + url.len());
+
+    let description = make_post_description(repo, length_left);
+
+    let text = format!("{}{}{}{}", prefix, description, stars, url);
+
+    let url = format!("https://api.zsxq.com/v2/groups/{}/topics", config.group_id);
+
+    let data = json!({
+        "req_data": {
+            "type": "topic",
+            "text": text,
+            "image_ids": [],
+            "file_ids": [],
+            "mentioned_user_ids": []
+        }
+    });
+
+    let client = reqwest::Client::builder()
+        .timeout(core::time::Duration::from_secs(60))
+        .default_headers(HeaderMap::from_iter(vec![(
+            HeaderName::from_str("cookie")?,
+            HeaderValue::from_str(&config.cookie)?,
+        )]))
+        .build()?;
+    let resp_str = client
+        .request(Method::POST, url)
+        .json(&data)
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    let resp: Value = serde_json::from_str(resp_str.as_str())?;
+    match resp["succeeded"].as_bool() {
+        None => Err(anyhow!("post zsxq failed: {}", resp_str)),
+        Some(b) => {
+            if b {
+                Ok(())
+            } else {
+                Err(anyhow!("post zsxq failed: {}", resp_str))
+            }
+        }
+    }
+}
+
 async fn post_bluesky(config: &BlueskyConfig, repo: &Repo) -> Result<()> {
     let thumbnail = get_github_og_image(repo).await?;
 
@@ -426,6 +492,15 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
                 .context("While posting to Bluesky")
             {
                 error!("{:#?}", error);
+            }
+        }
+
+        if let Some(config) = &config.zsxq {
+            if let Err(error) = post_zsxq(config, &repo)
+                .await
+                .context("While posting to zsxq")
+            {
+                error!("{:#?}", error)
             }
         }
 
