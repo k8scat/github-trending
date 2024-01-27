@@ -71,6 +71,12 @@ struct ZsxqConfig {
     group_id: String,
 }
 
+#[derive(Deserialize, Clone)]
+struct WeiboConfig {
+    cookie: String,
+    xsrf_token: String,
+}
+
 #[derive(Deserialize, Debug)]
 struct DenylistConfig {
     names: Vec<String>,
@@ -106,6 +112,7 @@ struct Config {
     bluesky: Option<BlueskyConfig>,
     denylist: DenylistConfig,
     zsxq: Option<ZsxqConfig>,
+    weibo: Option<WeiboConfig>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -370,6 +377,74 @@ async fn post_zsxq(config: &ZsxqConfig, repo: &Repo) -> Result<()> {
     }
 }
 
+async fn post_weibo(config: &WeiboConfig, repo: &Repo) -> Result<()> {
+    let client = reqwest::Client::builder().build()?;
+
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("authority", "weibo.com".parse()?);
+    headers.insert("accept", "application/json, text/plain, */*".parse()?);
+    headers.insert(
+        "accept-language",
+        "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7".parse()?,
+    );
+    headers.insert("cache-control", "no-cache".parse()?);
+    headers.insert("content-type", "application/x-www-form-urlencoded".parse()?);
+    headers.insert("cookie", config.cookie.parse()?);
+    headers.insert("origin", "https://weibo.com".parse()?);
+    headers.insert("pragma", "no-cache".parse()?);
+    headers.insert("referer", "https://weibo.com/".parse()?);
+    headers.insert(
+        "sec-ch-ua",
+        "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"".parse()?,
+    );
+    headers.insert("sec-ch-ua-mobile", "?0".parse()?);
+    headers.insert("sec-ch-ua-platform", "\"macOS\"".parse()?);
+    headers.insert("sec-fetch-dest", "empty".parse()?);
+    headers.insert("sec-fetch-mode", "cors".parse()?);
+    headers.insert("sec-fetch-site", "same-origin".parse()?);
+    headers.insert("server-version", "v2024.01.26.2".parse()?);
+    headers.insert("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".parse()?);
+    headers.insert("x-requested-with", "XMLHttpRequest".parse()?);
+    headers.insert("x-xsrf-token", config.xsrf_token.parse()?);
+
+    let prefix = make_post_prefix(repo);
+    let stars = make_post_stars(repo);
+    let url = format!("\n\n项目地址：github.com/{}/{}", repo.author, repo.name);
+    let length_left = ZSXQ_LENGTH - (prefix.len() + stars.len() + url.len());
+    let description = make_post_description(repo, length_left);
+    let text = format!("【Rust项目推荐】{}{}{}{}", prefix, description, stars, url);
+
+    let mut params = std::collections::HashMap::new();
+    params.insert("content", text.as_str());
+    params.insert("visible", "0");
+    params.insert("share_id", "");
+    params.insert("media", "");
+    params.insert("vote", "");
+
+    let request = client
+        .request(
+            reqwest::Method::POST,
+            "https://weibo.com/ajax/statuses/update",
+        )
+        .headers(headers)
+        .form(&params);
+
+    let response = request.send().await?;
+    let body = response.text().await?;
+
+    let resp: Value = serde_json::from_str(body.as_str())?;
+    match resp["ok"].as_i64() {
+        None => Err(anyhow!("post weibo failed: {}", body)),
+        Some(b) => {
+            if b == 1 {
+                Ok(())
+            } else {
+                Err(anyhow!("post weibo failed: {}", body))
+            }
+        }
+    }
+}
+
 async fn post_bluesky(config: &BlueskyConfig, repo: &Repo) -> Result<()> {
     let thumbnail = get_github_og_image(repo).await?;
 
@@ -499,6 +574,15 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
             if let Err(error) = post_zsxq(config, &repo)
                 .await
                 .context("While posting to zsxq")
+            {
+                error!("{:#?}", error)
+            }
+        }
+
+        if let Some(config) = &config.weibo {
+            if let Err(error) = post_weibo(config, &repo)
+                .await
+                .context("While posting to weibo")
             {
                 error!("{:#?}", error)
             }
