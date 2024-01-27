@@ -31,6 +31,7 @@ const BLUESKY_POST_LENGTH: usize = 300;
 const MASTODON_FIXED_URL_LENGTH: usize = 23;
 const SMALL_COMMERCIAL_AT: &str = "﹫";
 const ZSXQ_LENGTH: usize = 10000;
+const WEIBO_LENGTH: usize = 5000;
 
 #[derive(Deserialize)]
 struct IntervalConfig {
@@ -283,6 +284,24 @@ fn make_toot(repo: &Repo) -> String {
     format!("{}{}{}{}", prefix, description, stars, url)
 }
 
+fn make_weibo(repo: &Repo) -> String {
+    let prefix = make_post_prefix(repo);
+    let stars = make_post_stars(repo);
+    let url = format!("\n\n项目地址：github.com/{}/{}", repo.author, repo.name);
+    let length_left = WEIBO_LENGTH - (prefix.len() + stars.len() + url.len());
+    let description = make_post_description(repo, length_left);
+    format!("【Rust项目推荐】{}{}{}{}", prefix, description, stars, url)
+}
+
+fn make_zsxq(repo: &Repo) -> String {
+    let prefix = make_post_prefix(repo);
+    let stars = make_post_stars(repo);
+    let url = make_post_url(repo);
+    let length_left = ZSXQ_LENGTH - (prefix.len() + stars.len() + url.len());
+    let description = make_post_description(repo, length_left);
+    format!("【Rust项目推荐】{}{}{}{}", prefix, description, stars, url)
+}
+
 async fn is_repo_posted(conn: &mut redis::aio::Connection, repo: &Repo) -> Result<bool> {
     Ok(conn
         .exists(format!("{}/{}", repo.author, repo.name))
@@ -326,29 +345,17 @@ async fn toot(config: &MastodonConfig, content: &str) -> Result<()> {
     Ok(())
 }
 
-async fn post_zsxq(config: &ZsxqConfig, repo: &Repo) -> Result<()> {
-    let prefix = make_post_prefix(repo);
-    let stars = make_post_stars(repo);
-    let url = make_post_url(repo);
-
-    let length_left = ZSXQ_LENGTH - (prefix.len() + stars.len() + url.len());
-
-    let description = make_post_description(repo, length_left);
-
-    let text = format!("{}{}{}{}", prefix, description, stars, url);
-
+async fn post_zsxq(config: &ZsxqConfig, content: &str) -> Result<()> {
     let url = format!("https://api.zsxq.com/v2/groups/{}/topics", config.group_id);
-
     let data = json!({
         "req_data": {
             "type": "topic",
-            "text": text,
+            "text": content,
             "image_ids": [],
             "file_ids": [],
             "mentioned_user_ids": []
         }
     });
-
     let client = reqwest::Client::builder()
         .timeout(core::time::Duration::from_secs(60))
         .default_headers(HeaderMap::from_iter(vec![(
@@ -377,7 +384,7 @@ async fn post_zsxq(config: &ZsxqConfig, repo: &Repo) -> Result<()> {
     }
 }
 
-async fn post_weibo(config: &WeiboConfig, repo: &Repo) -> Result<()> {
+async fn post_weibo(config: &WeiboConfig, content: &str) -> Result<()> {
     let client = reqwest::Client::builder().build()?;
 
     let mut headers = reqwest::header::HeaderMap::new();
@@ -407,15 +414,8 @@ async fn post_weibo(config: &WeiboConfig, repo: &Repo) -> Result<()> {
     headers.insert("x-requested-with", "XMLHttpRequest".parse()?);
     headers.insert("x-xsrf-token", config.xsrf_token.parse()?);
 
-    let prefix = make_post_prefix(repo);
-    let stars = make_post_stars(repo);
-    let url = format!("\n\n项目地址：github.com/{}/{}", repo.author, repo.name);
-    let length_left = ZSXQ_LENGTH - (prefix.len() + stars.len() + url.len());
-    let description = make_post_description(repo, length_left);
-    let text = format!("【Rust项目推荐】{}{}{}{}", prefix, description, stars, url);
-
     let mut params = std::collections::HashMap::new();
-    params.insert("content", text.as_str());
+    params.insert("content", content);
     params.insert("visible", "0");
     params.insert("share_id", "");
     params.insert("media", "");
@@ -571,7 +571,8 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
         }
 
         if let Some(config) = &config.zsxq {
-            if let Err(error) = post_zsxq(config, &repo)
+            let content = make_zsxq(&repo);
+            if let Err(error) = post_zsxq(config, &content)
                 .await
                 .context("While posting to zsxq")
             {
@@ -580,7 +581,8 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
         }
 
         if let Some(config) = &config.weibo {
-            if let Err(error) = post_weibo(config, &repo)
+            let content = make_weibo(&repo);
+            if let Err(error) = post_weibo(config, &content)
                 .await
                 .context("While posting to weibo")
             {
