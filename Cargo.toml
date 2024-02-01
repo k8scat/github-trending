@@ -33,3 +33,4 @@ twitter-v2 = { version = "0.1.8", default-features = false, features = [
 unicode-segmentation = "1.10.1"
 url = { version = "2.3.1", features = ["serde"] }
 serde_json = "1.0"
+teloxide = { version = "0.12", features = ["macros"] }

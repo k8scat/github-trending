@@ -20,6 +20,7 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::str::FromStr;
+use teloxide::prelude::*;
 use time::OffsetDateTime;
 use twitter_v2::{authorization::Oauth1aToken, TwitterApi};
 use unicode_segmentation::UnicodeSegmentation;
@@ -32,6 +33,7 @@ const MASTODON_FIXED_URL_LENGTH: usize = 23;
 const SMALL_COMMERCIAL_AT: &str = "﹫";
 const ZSXQ_LENGTH: usize = 10000;
 const WEIBO_LENGTH: usize = 5000;
+const TELEGRAM_BOT_LENGTH: usize = 4096;
 
 #[derive(Deserialize)]
 struct IntervalConfig {
@@ -78,6 +80,12 @@ struct WeiboConfig {
     xsrf_token: String,
 }
 
+#[derive(Deserialize, Clone)]
+struct TelegramBotConfig {
+    token: String,
+    chat_id: i64,
+}
+
 #[derive(Deserialize, Debug)]
 struct DenylistConfig {
     names: Vec<String>,
@@ -114,6 +122,7 @@ struct Config {
     denylist: DenylistConfig,
     zsxq: Option<ZsxqConfig>,
     weibo: Option<WeiboConfig>,
+    telegram_bot: Option<TelegramBotConfig>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -302,6 +311,15 @@ fn make_zsxq(repo: &Repo) -> String {
     format!("【Rust项目推荐】{}{}{}{}", prefix, description, stars, url)
 }
 
+fn make_telegram_bot(repo: &Repo) -> String {
+    let prefix = make_post_prefix(repo);
+    let stars = make_post_stars(repo);
+    let url = make_post_url(repo);
+    let length_left = TELEGRAM_BOT_LENGTH - (prefix.len() + stars.len() + url.len());
+    let description = make_post_description(repo, length_left);
+    format!("{}{}{}{}", prefix, description, stars, url)
+}
+
 async fn is_repo_posted(conn: &mut redis::aio::Connection, repo: &Repo) -> Result<bool> {
     Ok(conn
         .exists(format!("{}/{}", repo.author, repo.name))
@@ -445,6 +463,15 @@ async fn post_weibo(config: &WeiboConfig, content: &str) -> Result<()> {
     }
 }
 
+async fn post_telegram_bot(config: &TelegramBotConfig, content: &str) -> Result<()> {
+    let bot = Bot::new(&config.token);
+
+    bot.send_message(ChatId(config.chat_id), content)
+        .send()
+        .await?;
+    Ok(())
+}
+
 async fn post_bluesky(config: &BlueskyConfig, repo: &Repo) -> Result<()> {
     let thumbnail = get_github_og_image(repo).await?;
 
@@ -585,6 +612,16 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
             if let Err(error) = post_weibo(config, &content)
                 .await
                 .context("While posting to weibo")
+            {
+                error!("{:#?}", error)
+            }
+        }
+
+        if let Some(config) = &config.telegram_bot {
+            let content = make_telegram_bot(&repo);
+            if let Err(error) = post_telegram_bot(config, &content)
+                .await
+                .context("While posting to telegram_bot")
             {
                 error!("{:#?}", error)
             }
