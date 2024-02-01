@@ -5,6 +5,8 @@ services:
     image: redis:4-alpine
     networks:
       - rust_trending_net
+    volumes:
+      - /srv/rust-trending/data:/data
 
   bot:
     image: ghcr.io/k8scat/rust-trending:latest
