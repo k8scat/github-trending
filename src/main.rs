@@ -1,5 +1,11 @@
 use std::{
-    convert::TryInto, env, fs::File, io::Read, iter::FromIterator, sync::Arc, time::{SystemTime, UNIX_EPOCH}
+    convert::TryInto,
+    env,
+    fs::File,
+    io::Read,
+    iter::FromIterator,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{anyhow, Context, Ok, Result};
@@ -233,14 +239,14 @@ async fn get_github_og_image(repo: &Repo) -> Result<Bytes> {
 
 fn make_repo_title(repo: &Repo) -> String {
     if repo.author != repo.name {
-        format!("{} / {}", repo.author, repo.name)
+        format!("{}/{}", repo.author, repo.name)
     } else {
         repo.name.clone()
     }
 }
 
 fn make_post_prefix(repo: &Repo) -> String {
-    format!("{}: ", make_repo_title(repo))
+    format!("{}", make_repo_title(repo))
 }
 
 fn make_post_stars(repo: &Repo) -> String {
@@ -276,7 +282,7 @@ async fn generate_description(content: &str) -> Result<String> {
         .json(&json!({
             "model": "gemini-1.5-pro",
             "messages": [
-                {"role": "user", "content": format!("假设你是一名资深技术专家，精通开源项目，请对以下开源项目进行详细总结：\n{}", content)}
+                {"role": "user", "content": format!("假设你是一名资深技术专家，精通开源项目，请基于以下开源项目内容写一段简介内容：\n{}", content)}
             ],
         }))
         .send()
@@ -284,15 +290,19 @@ async fn generate_description(content: &str) -> Result<String> {
         .json::<Value>()
         .await?;
 
-    let description = resp["choices"][0]["message"]["content"].as_str().unwrap_or_default().to_string();
+    let description = resp["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
     Ok(description)
 }
-
 
 async fn make_post_description(repo: &Repo, length_left: usize) -> Result<String> {
     let url = repo.get_url();
     let repo_content = fetch_repo_content(&url).await.unwrap_or_default();
-    let description = generate_description(&repo_content).await.unwrap_or_default();
+    let description = generate_description(&repo_content)
+        .await
+        .unwrap_or_default();
 
     // let description = repo.description.replace('@', SMALL_COMMERCIAL_AT);
     if description.graphemes(true).count() < length_left {
@@ -314,7 +324,9 @@ async fn make_tweet(repo: &Repo) -> Result<String> {
     let url = make_post_url(repo);
 
     let length_left = TWEET_LENGTH - (prefix.len() + stars.len() + url.len());
-    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    let description = make_post_description(repo, length_left)
+        .await
+        .unwrap_or_default();
     Ok(format!("{}{}{}{}", prefix, description, stars, url))
 }
 
@@ -324,7 +336,9 @@ async fn make_toot(repo: &Repo) -> Result<String> {
     let url = make_post_url(repo);
 
     let length_left = TOOT_LENGTH - (prefix.len() + stars.len() + MASTODON_FIXED_URL_LENGTH);
-    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    let description = make_post_description(repo, length_left)
+        .await
+        .unwrap_or_default();
     Ok(format!("{}{}{}{}", prefix, description, stars, url))
 }
 
@@ -333,18 +347,22 @@ async fn make_weibo(repo: &Repo) -> Result<String> {
     let stars = make_post_stars(repo);
     let url = format!("\n\n项目地址：github.com/{}/{}", repo.author, repo.name);
     let length_left = WEIBO_LENGTH - (prefix.len() + stars.len() + url.len());
-    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    let description = make_post_description(repo, length_left)
+        .await
+        .unwrap_or_default();
     Ok(format!("{}{}{}\n\n{}", stars, prefix, description, url))
 }
 
 async fn make_zsxq(repo: &Repo) -> Result<String> {
-    let prefix = make_post_prefix(repo);
     let stars = make_post_stars(repo);
     let url = make_post_url(repo);
-    let length_left = ZSXQ_LENGTH - (prefix.len() + stars.len() + url.len());
-    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    let tags = "<e type=\"hashtag\" hid=\"0\" title=\"%23Rust%23\" /> <e type=\"hashtag\" hid=\"0\" title=\"%23%E5%BC%80%E6%BA%90%E9%A1%B9%E7%9B%AE%23\" /> <e type=\"hashtag\" hid=\"0\" title=\"%23%E9%A1%B9%E7%9B%AE%E6%8E%A8%E8%8D%90%23\" />";
+    let length_left = ZSXQ_LENGTH - (repo.name.len() + stars.len() + url.len() + tags.len());
+    let description = make_post_description(repo, length_left)
+        .await
+        .unwrap_or_default();
     info!("{}/{} description: {}", repo.author, repo.name, description);
-    Ok(format!("{}{}{}\n\n{}", prefix, description, stars, url))
+    Ok(format!("{} Rust开源项目推荐 {}：{}\n\n{}\n\n{}", stars, repo.name, description, url, tags))
 }
 
 async fn make_telegram_bot(repo: &Repo) -> Result<String> {
@@ -352,7 +370,9 @@ async fn make_telegram_bot(repo: &Repo) -> Result<String> {
     let stars = make_post_stars(repo);
     let url = make_post_url(repo);
     let length_left = TELEGRAM_BOT_LENGTH - (prefix.len() + stars.len() + url.len());
-    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    let description = make_post_description(repo, length_left)
+        .await
+        .unwrap_or_default();
     Ok(format!("{}{}{}{}", prefix, description, stars, url))
 }
 
@@ -517,7 +537,9 @@ async fn post_bluesky(config: &BlueskyConfig, repo: &Repo) -> Result<()> {
 
     let length_left = BLUESKY_POST_LENGTH - (prefix.len() + stars.len() + url.len());
 
-    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    let description = make_post_description(repo, length_left)
+        .await
+        .unwrap_or_default();
     let text = format!("{}{}{}{}", prefix, description, stars, url);
 
     let client = AtpServiceClient::new(Arc::new(atrium_xrpc::client::reqwest::ReqwestClient::new(
