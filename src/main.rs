@@ -343,6 +343,7 @@ async fn make_zsxq(repo: &Repo) -> Result<String> {
     let url = make_post_url(repo);
     let length_left = ZSXQ_LENGTH - (prefix.len() + stars.len() + url.len());
     let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    info!("{}/{} description: {}", repo.author, repo.name, description);
     Ok(format!("{}{}{}\n\n{}", prefix, description, stars, url))
 }
 
