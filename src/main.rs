@@ -1,10 +1,5 @@
 use std::{
-    convert::TryInto,
-    fs::File,
-    io::Read,
-    iter::FromIterator,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    convert::TryInto, env, fs::File, io::Read, iter::FromIterator, sync::Arc, time::{SystemTime, UNIX_EPOCH}
 };
 
 use anyhow::{anyhow, Context, Ok, Result};
@@ -30,7 +25,7 @@ const TWEET_LENGTH: usize = 280;
 const TOOT_LENGTH: usize = 500;
 const BLUESKY_POST_LENGTH: usize = 300;
 const MASTODON_FIXED_URL_LENGTH: usize = 23;
-const SMALL_COMMERCIAL_AT: &str = "﹫";
+// const SMALL_COMMERCIAL_AT: &str = "﹫";
 const ZSXQ_LENGTH: usize = 10000;
 const WEIBO_LENGTH: usize = 5000;
 const TELEGRAM_BOT_LENGTH: usize = 4096;
@@ -271,7 +266,7 @@ async fn fetch_repo_content(url: &str) -> Result<String> {
 async fn generate_description(content: &str) -> Result<String> {
     // Call the OpenAI API to generate a description based on the content
     // Replace the following placeholders with your OpenAI API credentials and endpoint
-    let api_key = "YOUR_API_KEY";
+    let api_key = env::var("OPENAI_API_KEY")?;
     let endpoint = "https://api.openai-all.com/v1/chat/completions";
 
     let client = reqwest::Client::new();

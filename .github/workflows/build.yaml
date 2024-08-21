@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    if: github.repository == 'k8scat/rust-trending'
     runs-on: ubuntu-latest
     permissions:
       packages: write
