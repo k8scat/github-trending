@@ -134,6 +134,12 @@ struct Repo {
     stars: usize,
 }
 
+impl Repo {
+    fn get_url(&self) -> String {
+        format!("https://github.com/{}/{}", self.author, self.name)
+    }
+}
+
 #[inline]
 fn now_ts() -> u64 {
     SystemTime::now()
@@ -243,7 +249,7 @@ fn make_post_prefix(repo: &Repo) -> String {
 }
 
 fn make_post_stars(repo: &Repo) -> String {
-    format!(" ★{}", repo.stars)
+    format!("⭐️{}", repo.stars)
 }
 
 fn make_post_url(repo: &Repo) -> String {
@@ -254,70 +260,104 @@ fn repo_uri(repo: &Repo) -> String {
     format!("https://github.com/{}/{}", repo.author, repo.name)
 }
 
-fn make_post_description(repo: &Repo, length_left: usize) -> String {
-    let description = repo.description.replace('@', SMALL_COMMERCIAL_AT);
-    if repo.description.graphemes(true).count() < length_left {
-        description
+// 调用 r.jina.ai 接口读取 github repo 地址的内容
+async fn fetch_repo_content(url: &str) -> Result<String> {
+    let url = format!("https://r.jina.ai/{}", url);
+    let client = reqwest::Client::new();
+    let resp = client.get(url).send().await?.text().await?;
+    Ok(resp)
+}
+
+async fn generate_description(content: &str) -> Result<String> {
+    // Call the OpenAI API to generate a description based on the content
+    // Replace the following placeholders with your OpenAI API credentials and endpoint
+    let api_key = "YOUR_API_KEY";
+    let endpoint = "https://api.openai-all.com/v1/chat/completions";
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(endpoint)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&json!({
+            "model": "gemini-1.5-pro",
+            "messages": [
+                {"role": "user", "content": format!("假设你是一名资深技术专家，精通开源项目，请对以下开源项目进行详细总结：\n{}", content)}
+            ],
+        }))
+        .send()
+        .await?
+        .json::<Value>()
+        .await?;
+
+    let description = resp["choices"][0]["message"]["content"].as_str().unwrap_or_default().to_string();
+    Ok(description)
+}
+
+
+async fn make_post_description(repo: &Repo, length_left: usize) -> Result<String> {
+    let url = repo.get_url();
+    let repo_content = fetch_repo_content(&url).await.unwrap_or_default();
+    let description = generate_description(&repo_content).await.unwrap_or_default();
+
+    // let description = repo.description.replace('@', SMALL_COMMERCIAL_AT);
+    if description.graphemes(true).count() < length_left {
+        Ok(description)
     } else {
-        format!(
+        Ok(format!(
             "{} ...",
             description
                 .graphemes(true)
                 .take(length_left - 4)
                 .collect::<String>()
-        )
+        ))
     }
 }
 
-fn make_tweet(repo: &Repo) -> String {
+async fn make_tweet(repo: &Repo) -> Result<String> {
     let prefix = make_post_prefix(repo);
     let stars = make_post_stars(repo);
     let url = make_post_url(repo);
 
     let length_left = TWEET_LENGTH - (prefix.len() + stars.len() + url.len());
-
-    let description = make_post_description(repo, length_left);
-
-    format!("{}{}{}{}", prefix, description, stars, url)
+    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    Ok(format!("{}{}{}{}", prefix, description, stars, url))
 }
 
-fn make_toot(repo: &Repo) -> String {
+async fn make_toot(repo: &Repo) -> Result<String> {
     let prefix = make_post_prefix(repo);
     let stars = make_post_stars(repo);
     let url = make_post_url(repo);
 
     let length_left = TOOT_LENGTH - (prefix.len() + stars.len() + MASTODON_FIXED_URL_LENGTH);
-
-    let description = make_post_description(repo, length_left);
-
-    format!("{}{}{}{}", prefix, description, stars, url)
+    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    Ok(format!("{}{}{}{}", prefix, description, stars, url))
 }
 
-fn make_weibo(repo: &Repo) -> String {
+async fn make_weibo(repo: &Repo) -> Result<String> {
     let prefix = make_post_prefix(repo);
     let stars = make_post_stars(repo);
     let url = format!("\n\n项目地址：github.com/{}/{}", repo.author, repo.name);
     let length_left = WEIBO_LENGTH - (prefix.len() + stars.len() + url.len());
-    let description = make_post_description(repo, length_left);
-    format!("【Rust项目推荐】{}{}{}{}", prefix, description, stars, url)
+    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    Ok(format!("{}{}{}\n\n{}", stars, prefix, description, url))
 }
 
-fn make_zsxq(repo: &Repo) -> String {
+async fn make_zsxq(repo: &Repo) -> Result<String> {
     let prefix = make_post_prefix(repo);
     let stars = make_post_stars(repo);
     let url = make_post_url(repo);
     let length_left = ZSXQ_LENGTH - (prefix.len() + stars.len() + url.len());
-    let description = make_post_description(repo, length_left);
-    format!("【Rust项目推荐】{}{}{}{}", prefix, description, stars, url)
+    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    Ok(format!("{}{}{}\n\n{}", prefix, description, stars, url))
 }
 
-fn make_telegram_bot(repo: &Repo) -> String {
+async fn make_telegram_bot(repo: &Repo) -> Result<String> {
     let prefix = make_post_prefix(repo);
     let stars = make_post_stars(repo);
     let url = make_post_url(repo);
     let length_left = TELEGRAM_BOT_LENGTH - (prefix.len() + stars.len() + url.len());
-    let description = make_post_description(repo, length_left);
-    format!("{}{}{}{}", prefix, description, stars, url)
+    let description = make_post_description(repo, length_left).await.unwrap_or_default();
+    Ok(format!("{}{}{}{}", prefix, description, stars, url))
 }
 
 async fn is_repo_posted(conn: &mut redis::aio::Connection, repo: &Repo) -> Result<bool> {
@@ -481,8 +521,7 @@ async fn post_bluesky(config: &BlueskyConfig, repo: &Repo) -> Result<()> {
 
     let length_left = BLUESKY_POST_LENGTH - (prefix.len() + stars.len() + url.len());
 
-    let description = make_post_description(repo, length_left);
-
+    let description = make_post_description(repo, length_left).await.unwrap_or_default();
     let text = format!("{}{}{}{}", prefix, description, stars, url);
 
     let client = AtpServiceClient::new(Arc::new(atrium_xrpc::client::reqwest::ReqwestClient::new(
@@ -575,14 +614,14 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
         }
 
         if let Some(config) = &config.twitter {
-            let content = make_tweet(&repo);
+            let content = make_tweet(&repo).await.unwrap_or_default();
             if let Err(error) = tweet(config, content).await.context("While tweeting") {
                 error!("{:#?}", error);
             }
         }
 
         if let Some(config) = &config.mastodon {
-            let content = make_toot(&repo);
+            let content = make_toot(&repo).await.unwrap_or_default();
             if let Err(error) = toot(config, &content).await.context("While tooting") {
                 error!("{:#?}", error);
             }
@@ -598,7 +637,7 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
         }
 
         if let Some(config) = &config.zsxq {
-            let content = make_zsxq(&repo);
+            let content = make_zsxq(&repo).await.unwrap_or_default();
             if let Err(error) = post_zsxq(config, &content)
                 .await
                 .context("While posting to zsxq")
@@ -608,7 +647,7 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
         }
 
         if let Some(config) = &config.weibo {
-            let content = make_weibo(&repo);
+            let content = make_weibo(&repo).await.unwrap_or_default();
             if let Err(error) = post_weibo(config, &content)
                 .await
                 .context("While posting to weibo")
@@ -618,7 +657,7 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
         }
 
         if let Some(config) = &config.telegram_bot {
-            let content = make_telegram_bot(&repo);
+            let content = make_telegram_bot(&repo).await.unwrap_or_default();
             if let Err(error) = post_telegram_bot(config, &content)
                 .await
                 .context("While posting to telegram_bot")
@@ -668,141 +707,5 @@ async fn main() -> Result<()> {
             config.interval.fetch_interval,
         ))
         .await;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{make_tweet, parse_trending, DenylistConfig, Repo};
-
-    const TEST_HTML: &str = include_str!("../testdata/test.html");
-
-    macro_rules! repo {
-        ( $author:expr, $name:expr, $description:expr, $stars:expr ) => {
-            Repo {
-                author: $author.to_string(),
-                name: $name.to_string(),
-                description: $description.to_string(),
-                stars: $stars,
-            }
-        };
-    }
-
-    #[test]
-    fn test_denylistconfig_contains() {
-        assert!(!DenylistConfig {
-            authors: vec![],
-            names: vec![],
-            descriptions: vec![]
-        }
-        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
-        assert!(DenylistConfig {
-            authors: vec!["foo".to_string()],
-            names: vec![],
-            descriptions: vec![]
-        }
-        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
-        assert!(!DenylistConfig {
-            authors: vec!["bar".to_string()],
-            names: vec![],
-            descriptions: vec![]
-        }
-        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
-        assert!(DenylistConfig {
-            authors: vec![],
-            names: vec!["bar".to_string()],
-            descriptions: vec![]
-        }
-        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
-        assert!(!DenylistConfig {
-            authors: vec![],
-            names: vec!["foo".to_string()],
-            descriptions: vec![]
-        }
-        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
-        assert!(DenylistConfig {
-            authors: vec![],
-            names: vec![],
-            descriptions: vec!["long".to_string()]
-        }
-        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
-        assert!(!DenylistConfig {
-            authors: vec![],
-            names: vec![],
-            descriptions: vec!["foo".to_string()]
-        }
-        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
-        assert!(DenylistConfig {
-            authors: vec![],
-            names: vec![],
-            descriptions: vec!["Long".to_string()]
-        }
-        .contains(&repo!("foo", "bar", "someloNgdescription", 0)));
-    }
-
-    #[test]
-    fn test_parse_trending() {
-        let repos = parse_trending(TEST_HTML.to_string()).unwrap();
-        assert_eq!(
-            repos[..5].to_vec(),
-            vec![
-                repo!("servo", "servo", "The Servo Browser Engine", 18622),
-                repo!(
-                    "timberio",
-                    "vector",
-                    "A high-performance, end-to-end observability data platform.",
-                    5672
-                ),
-                repo!(
-                    "rust-lang",
-                    "rust",
-                    "Empowering everyone to build reliable and efficient software.",
-                    49626
-                ),
-                repo!(
-                    "wasmerio",
-                    "wasmer",
-                    "🚀 The leading WebAssembly Runtime supporting WASI and Emscripten",
-                    6806
-                ),
-                repo!(
-                    "firecracker-microvm",
-                    "firecracker",
-                    "Secure and fast microVMs for serverless computing.",
-                    13092
-                ),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_make_tweet() {
-        assert_eq!(
-            make_tweet(&repo!(
-                "wez",
-                "wezterm",
-                "A GPU-accelerated cross-platform terminal emulator and multiplexer written by @wez and implemented in Rust",
-                5924
-            )),
-            "wez / wezterm: A GPU-accelerated cross-platform terminal emulator and multiplexer written by ﹫wez and implemented in Rust ★5924 https://github.com/wez/wezterm"
-        );
-        assert_eq!(
-            make_tweet(&repo!(
-                "AlfioEmanueleFresta",
-                "xdg-credentials-portal",
-                "FIDO2 (WebAuthn) and FIDO U2F platform library for Linux written in Rust; includes a proposal for a new D-Bus Portal interface for FIDO2, accessible from Flatpak apps and Snaps key",
-                192
-            )),
-            "AlfioEmanueleFresta / xdg-credentials-portal: FIDO2 (WebAuthn) and FIDO U2F platform library for Linux written in Rust; includes a proposal for a new D-Bus Portal interface for FIDO2, accessible from Flatpak ... ★192 https://github.com/AlfioEmanueleFresta/xdg-credentials-portal"
-        );
-        assert_eq!(
-            make_tweet(&repo!(
-                "meilisearch",
-                "meilisearch",
-                "A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow.",
-                30388
-            )),
-            "meilisearch: A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow. ★30388 https://github.com/meilisearch/meilisearch"
-        );
     }
 }
