@@ -6,16 +6,16 @@ services:
     networks:
       - rust_trending_net
     volumes:
-      - /srv/rust-trending/data:/data
+      - /srv/go-trending/data:/data
 
   bot:
-    image: ghcr.io/k8scat/rust-trending:latest
+    image: ghcr.io/k8scat/go-trending:latest
     depends_on:
       - redis
     environment:
       - RUST_LOG=info
     volumes:
-      - /srv/rust-trending/config.toml:/config.toml
+      - /srv/go-trending/config.toml:/config.toml
     networks:
       - rust_trending_net
 

@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    if: github.repository == 'k8scat/rust-trending'
+    if: github.repository == 'k8scat/go-trending'
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -21,4 +21,4 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker buildx build --platform linux/amd64 . -t ghcr.io/k8scat/rust-trending:latest --push
+          docker buildx build --platform linux/amd64 . -t ghcr.io/k8scat/go-trending:latest --push

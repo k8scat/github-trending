@@ -9,5 +9,6 @@ RUN cargo install --path . --root /x
 FROM ${TARGETARCH} AS build
 
 FROM alpine
-COPY --from=build /x/bin/rust-trending /usr/local/bin/rust-trending
-CMD ["rust-trending"]
+COPY --from=build /x/bin/go-trending /usr/local/bin/go-trending
+ENV RUST_LOG=info
+CMD ["go-trending"]
