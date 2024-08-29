@@ -1,6 +1,6 @@
 # go-trending
 
-将 GitHub Trending 的开源项目推送到一些内容平台，比如知识星球，同时结合 OpenAI 自动生成项目的介绍。
+Rust 实现，将 GitHub Trending 的开源项目推送到一些内容平台，比如知识星球，同时结合 OpenAI 自动生成项目的介绍。
 
 ## 内容平台
 
