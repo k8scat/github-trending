@@ -16,3 +16,4 @@ descriptions = []
 [zsxq]
 cookie = ""
 group_id = ""  # 从网页端知识星球的 URL 中获取
+tags = ["Go", "开源项目", "项目推荐"]
