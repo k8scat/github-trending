@@ -1,0 +1,18 @@
+[interval]
+post_ttl = 604800  # 推送周期，期间内不会再次推送
+fetch_interval = 60  # 项目列表获取周期
+post_interval = 60  # 项目推送间隔，两次推送的最小间隔
+
+[redis]
+url = "redis://localhost:6379/0"
+
+# 项目黑名单
+[denylist]
+names = []
+authors = []
+descriptions = []
+
+# 知识星球配置
+[zsxq]
+cookie = ""
+group_id = ""  # 从网页端知识星球的 URL 中获取
