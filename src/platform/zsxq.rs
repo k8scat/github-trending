@@ -1,12 +1,8 @@
-use std::iter::FromIterator;
-use std::str::FromStr;
 use url::form_urlencoded;
 use async_trait::async_trait;
 use super::types::Platform;
 use crate::repo::Repo;
 use anyhow::{anyhow, Context, Result};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-use reqwest::Method;
 use reqwest_middleware::ClientBuilder;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
@@ -19,6 +15,7 @@ const MAX_LENGTH: usize = 10000;
 pub struct Zsxq {
     cookie: String,
     group_id: String,
+    tags: Option<Vec<String>>,
 }
 
 #[async_trait]
@@ -65,7 +62,9 @@ impl Platform for Zsxq {
 
     async fn content_by_repo(&self, repo: &Repo) -> Result<String> {
         let url = repo.get_url();
-        let tags = vec![tag("Go"), tag("开源项目"), tag("项目推荐")].join(" ");
+        let tags = self.tags.clone().unwrap_or(vec![]).iter().map(|val| {
+            tag(val)
+        }).collect::<Vec<String>>().join(" ");
         let mut length_left = MAX_LENGTH - (url.len() + tags.len());
         let description = repo.get_chinese_description(length_left)
             .await.context("While getting repo chinese description")?;
