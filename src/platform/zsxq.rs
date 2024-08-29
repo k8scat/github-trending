@@ -65,13 +65,9 @@ impl Platform for Zsxq {
         let tags = self.tags.clone().unwrap_or(vec![]).iter().map(|val| {
             tag(val)
         }).collect::<Vec<String>>().join(" ");
-        let mut length_left = MAX_LENGTH - (url.len() + tags.len());
-        let description = repo.get_chinese_description(length_left)
-            .await.context("While getting repo chinese description")?;
-        length_left -= description.len();
-        let content = repo.get_content(length_left)
-            .await.context("While getting repo content")?;
-        Ok(format!("{}\n\n{}\n\n{}\n\n{}", description, content, url, tags))
+        let length_left = MAX_LENGTH - (url.len() + tags.len());
+        let content = repo.get_content(length_left).await.context("While getting repo content")?;
+        Ok(format!("{}\n\n{}\n\n{}", content, url, tags))
     }
 }
 

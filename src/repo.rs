@@ -22,17 +22,11 @@ impl Repo {
         format!("https://github.com/{}/{}", self.author, self.name)
     }
 
-    pub async fn get_chinese_description(&self, max_length: usize) -> Result<String> {
-        let prompt = format!("Translate into Chinese：{}", self.description);
-        let translation = chat_completion(&prompt).await.context("While chat completion")?;
-        Ok(truncate(&translation, max_length))
-    }
-
     pub async fn get_content(&self, max_length: usize) -> Result<String> {
         let url = self.get_url();
-        let repo_content = read_url(&url).await.context("While reading repo content")?;
+        let repo_content = read_url(&url).await.context("While read url")?;
         let prompt = format!("假设你是一名资深技术专家，精通各种开源项目，请基于以下开源项目内容写一段简介内容，用中文回答：{}", repo_content);
-        let content = chat_completion(&prompt).await?;
+        let content = chat_completion(&prompt).await.context(format!("prompt: {}", prompt))?;
         Ok(truncate(&content, max_length))
     }
 }
