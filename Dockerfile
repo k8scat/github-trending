@@ -10,6 +10,6 @@ FROM ${TARGETARCH} AS build
 
 FROM alpine
 LABEL maintainer="K8sCat <k8scat@gmail.com>"
-COPY --from=build /x/bin/go-trending /usr/local/bin/go-trending
+COPY --from=build /x/bin/github-trending /usr/local/bin/github-trending
 ENV RUST_LOG=info
-CMD ["go-trending"]
+CMD ["github-trending"]

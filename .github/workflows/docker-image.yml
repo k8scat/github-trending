@@ -29,4 +29,4 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: k8scat/go-trending:latest
+          tags: k8scat/github-trending:latest

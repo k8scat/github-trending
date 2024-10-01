@@ -1,4 +1,4 @@
-# go-trending
+# github-trending
 
 Rust 实现，将 GitHub Trending 的开源项目推送到一些内容平台，比如知识星球，同时结合 OpenAI 自动生成项目的介绍。
 
@@ -6,7 +6,7 @@ Rust 实现，将 GitHub Trending 的开源项目推送到一些内容平台，�
 
 - [x] 知识星球
 
-其它平台可以提 [Issue](https://github.com/k8scat/go-trending/issues) 或者 [PR](https://github.com/k8scat/go-trending/pulls)。
+其它平台可以提 [Issue](https://github.com/k8scat/github-trending/issues) 或者 [PR](https://github.com/k8scat/github-trending/pulls)。
 
 ## 配置说明
 

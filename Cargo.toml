@@ -1,9 +1,9 @@
 [package]
-name = "go-trending"
+name = "github-trending"
 version = "0.1.0"
 authors = ["K8sCat <k8scat@gmail.com>"]
 edition = "2018"
-repository = "https://github.com/k8scat/go-trending"
+repository = "https://github.com/k8scat/github-trending"
 readme = "README.md"
 license = "MIT"
 

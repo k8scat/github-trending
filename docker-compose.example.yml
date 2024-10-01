@@ -4,8 +4,8 @@ services:
     volumes:
       - ./data:/data
 
-  go-trending:
-    image: k8scat/go-trending:latest
+  github-trending:
+    image: k8scat/github-trending:latest
     depends_on:
       - redis
     environment:

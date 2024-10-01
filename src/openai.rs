@@ -1,5 +1,5 @@
 use std::env;
-use reqwest;
+use reqwest::{self, StatusCode};
 use serde_json::{json, Value};
 use anyhow::Result;
 use reqwest_middleware::ClientBuilder;
@@ -29,10 +29,14 @@ pub async fn chat_completion(content: &str) -> Result<String> {
             ],
         }))
         .send()
-        .await?
-        .json::<Value>()
         .await?;
 
+    let resp = resp.error_for_status()?;
+    if resp.status() != StatusCode::OK {
+        return Err(anyhow::anyhow!("Error: {}, text: {}", resp.status(), resp.text().await?));
+    }
+
+    let resp = resp.json::<Value>().await?;
     let result = resp["choices"][0]["message"]["content"]
         .as_str()
         .unwrap_or_default()
